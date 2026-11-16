@@ -4,7 +4,7 @@ name: Windows
 # portable Version zusätzlich an das gleichnamige Release gehängt.
 on:
   push:
-    branches: [main, windows]
+    branches: [main]
     tags: ['v*']
     paths: ['Windows/**', '.github/workflows/windows.yml']
   pull_request:
