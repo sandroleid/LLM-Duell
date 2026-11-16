@@ -1,0 +1,78 @@
+name: Windows
+
+# Baut und testet die Windows-Version. Bei einem Tag „v1.2.3“ werden Installer und
+# portable Version zusätzlich an das gleichnamige Release gehängt.
+on:
+  push:
+    branches: [main, windows]
+    tags: ['v*']
+    paths: ['Windows/**', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['Windows/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version bestimmen
+        id: version
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $version = ([xml](Get-Content Windows/LLMDuell.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $version"
+
+      - name: Inno Setup bereitstellen
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Bauen und paketieren
+        run: ./Windows/build.ps1 -Version ${{ steps.version.outputs.version }} -Package
+
+      - name: Test mit simuliertem Ollama
+        run: ./Windows/Tests/smoke.ps1
+
+      - name: Installer testen
+        run: |
+          $setup = Get-Item dist/LLM-Duell-*-Setup.exe
+          Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\LLM Duell\LLM Duell.exe'
+          if (-not (Test-Path $installed)) { throw "Nicht installiert: $installed" }
+          $link = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\LLM Duell.lnk'
+          if (-not (Test-Path $link)) { throw "Kein Startmenü-Eintrag: $link" }
+          Write-Host "Installiert: $installed ($((Get-Item $installed).VersionInfo.ProductVersion))"
+
+      - name: Ergebnisse sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LLM-Duell-Windows-${{ steps.version.outputs.version }}
+          path: |
+            dist/LLM-Duell-*
+            build/shots/
+          if-no-files-found: warn
+
+      - name: An das Release hängen
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --verify-tag --title "LLM Duell ${{ steps.version.outputs.version }}" --generate-notes
+          }
+          gh release upload $tag (Get-ChildItem dist/LLM-Duell-* | ForEach-Object FullName) --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Upload fehlgeschlagen' }

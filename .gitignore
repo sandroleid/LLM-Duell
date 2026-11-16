@@ -1,4 +1,7 @@
 .build/
+build/
+bin/
+obj/
 .swiftpm/
 dist/
 *.app
