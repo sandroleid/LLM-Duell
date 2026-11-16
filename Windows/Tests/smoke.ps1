@@ -31,7 +31,7 @@ function Save-Screen($path) {
 }
 
 # Startet die App mit den angegebenen Einstellungen und liefert den Inhalt von result.txt.
-function Invoke-Scenario($name, $config, $variables, [switch]$Screen) {
+function Invoke-Scenario($name, $config, $variables, [int]$ScreenAfter = 0) {
     Write-Host "`n=== $name ==="
     $dir = Join-Path $shots $name
     New-Item -ItemType Directory -Force $dir | Out-Null
@@ -41,7 +41,7 @@ function Invoke-Scenario($name, $config, $variables, [switch]$Screen) {
     foreach ($key in $all.Keys) { Set-Item "env:$key" $all[$key] }
     try {
         $process = Start-Process $exe -PassThru
-        if ($Screen) { Start-Sleep 4; Save-Screen (Join-Path $dir 'screen.png') }
+        if ($ScreenAfter -gt 0) { Start-Sleep $ScreenAfter; Save-Screen (Join-Path $dir 'screen.png') }
         if (-not $process.WaitForExit(120000)) {
             Save-Screen (Join-Path $dir 'timeout.png')
             $process.Kill()
@@ -85,7 +85,7 @@ try {
 
     # 2. Parallel, dunkler Modus, mit Gedankengang
     $r = Invoke-Scenario 'dunkel-parallel' ($base + @{ mode = 'parallel'; modelLeft = 'mock-denker:8b'; modelRight = 'mock-flink:4b' }) `
-        @{ LLMDUELL_APPEARANCE = 'dark'; LLMDUELL_PROMPT = $prompt; LLMDUELL_SHOTS = '3'; LLMDUELL_INTERVAL = '1.5'; LLMDUELL_WAIT = '60' } -Screen
+        @{ LLMDUELL_APPEARANCE = 'dark'; LLMDUELL_PROMPT = $prompt; LLMDUELL_SHOTS = '3'; LLMDUELL_INTERVAL = '1.5'; LLMDUELL_WAIT = '60'; LLMDUELL_HOLD = '8' } -ScreenAfter 14
     Assert-Match 'dunkel-parallel' $r 'left: model=mock-denker:8b phase=Done output_tokens=\d+ .* thinking_chars=[1-9]\d+ '
     Assert-Match 'dunkel-parallel' $r 'right: model=mock-flink:4b phase=Done output_tokens=207 '
 
@@ -97,9 +97,9 @@ try {
 
     # 4. und 5. Popups (nur als Bildschirmfoto sichtbar)
     Invoke-Scenario 'optionen' ($base + @{ mode = 'sequential'; modelLeft = 'mock-flink:4b'; modelRight = 'mock-gross:12b' }) `
-        @{ LLMDUELL_APPEARANCE = 'light'; LLMDUELL_OPEN = 'options'; LLMDUELL_SHOTS = '2'; LLMDUELL_INTERVAL = '5' } -Screen | Out-Null
+        @{ LLMDUELL_APPEARANCE = 'light'; LLMDUELL_OPEN = 'options'; LLMDUELL_SHOTS = '2'; LLMDUELL_INTERVAL = '5' } -ScreenAfter 4 | Out-Null
     Invoke-Scenario 'modellliste' ($base + @{ mode = 'sequential'; modelLeft = 'mock-flink:4b'; modelRight = 'mock-gross:12b' }) `
-        @{ LLMDUELL_APPEARANCE = 'dark'; LLMDUELL_OPEN = 'models'; LLMDUELL_SHOTS = '2'; LLMDUELL_INTERVAL = '5' } -Screen | Out-Null
+        @{ LLMDUELL_APPEARANCE = 'dark'; LLMDUELL_OPEN = 'models'; LLMDUELL_SHOTS = '2'; LLMDUELL_INTERVAL = '5' } -ScreenAfter 4 | Out-Null
 } finally {
     Stop-Process $mock -Force -ErrorAction SilentlyContinue
 }

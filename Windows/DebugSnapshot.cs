@@ -18,6 +18,7 @@ namespace LLMDuell
     ///   LLMDUELL_SHOTS          Anzahl der Bilder (Standard 5)
     ///   LLMDUELL_INTERVAL       Sekunden zwischen den Bildern (Standard 3)
     ///   LLMDUELL_WAIT           Nach dem letzten Bild warten, bis der Lauf fertig ist (höchstens so viele Sekunden)
+    ///   LLMDUELL_HOLD           Danach noch so viele Sekunden geöffnet bleiben
     ///   LLMDUELL_OPEN           „options“ oder „models“ klappt das jeweilige Popup auf
     ///   LLMDUELL_APPEARANCE     „dark“ oder „light“ (wird in Theme.cs ausgewertet)
     ///   LLMDUELL_QUIT           „1“ beendet die App am Ende
@@ -60,6 +61,7 @@ namespace LLMDuell
             }
 
             File.WriteAllText(Path.Combine(directory, "result.txt"), Describe(app), Encoding.UTF8);
+            await Task.Delay(TimeSpan.FromSeconds(Number("LLMDUELL_HOLD", 0)));
             if (Environment.GetEnvironmentVariable("LLMDUELL_QUIT") == "1") Application.Current.Shutdown();
         }
 

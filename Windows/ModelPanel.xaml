@@ -131,7 +131,7 @@
                     <TextBlock Style="{StaticResource Caption}" Text="Tokens pro Sekunde über Zeit" HorizontalAlignment="Left" />
                     <TextBlock x:Name="ChartAverage" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" />
                 </Grid>
-                <local:SpeedChart x:Name="Chart" Height="100" Margin="0,6,0,0" />
+                <local:SpeedChart x:Name="Chart" Height="88" Margin="0,6,0,0" />
             </StackPanel>
         </Border>
 
