@@ -40,16 +40,21 @@ jobs:
           Expand-Archive ollama.zip -DestinationPath ollama
           $ollama = (Get-ChildItem ollama -Recurse -Filter ollama.exe | Select-Object -First 1).FullName
           "OLLAMA=$ollama" >> $env:GITHUB_ENV
-          Start-Process $ollama -ArgumentList serve -WindowStyle Hidden -RedirectStandardError ollama.log
+          Start-Process $ollama -ArgumentList serve -WindowStyle Hidden
           foreach ($i in 1..30) {
             try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Host; break } catch { Start-Sleep 1 }
           }
-          & $ollama pull $env:MODEL_A
-          & $ollama pull $env:MODEL_B
+          & $ollama pull $env:MODEL_A 2>&1 | Select-Object -Last 1
+          & $ollama pull $env:MODEL_B 2>&1 | Select-Object -Last 1
           & $ollama list
 
       - name: Vergleich durchführen
         run: |
+          # GitHub beendet Hintergrundprozesse am Ende jedes Schritts, daher hier erneut starten.
+          Start-Process $env:OLLAMA -ArgumentList serve -WindowStyle Hidden -RedirectStandardError ollama.log
+          foreach ($i in 1..30) {
+            try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Host; break } catch { Start-Sleep 1 }
+          }
           try { Set-DisplayResolution -Width 1920 -Height 1080 -Force | Out-Null } catch { }
           $shots = Join-Path $PWD 'build\shots\e2e'
           $settings = Join-Path $env:APPDATA 'LLM Duell\settings.json'

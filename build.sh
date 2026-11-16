@@ -5,14 +5,14 @@
 #   ./build.sh --dmg      → zusätzlich dist/LLM-Duell-<Version>.dmg
 #
 # Optionale Umgebungsvariablen:
-#   VERSION=1.2.0                    Versionsnummer (Standard: 1.0.0)
+#   VERSION=1.2.0                    Versionsnummer (Standard: 1.1.0)
 #   SIGN_IDENTITY="Developer ID Application: …"
 #                                    Mit Developer-ID signieren statt ad hoc
 #   NOTARY_PROFILE=<profil>          DMG notarisieren (xcrun notarytool store-credentials)
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.1.0}"
 NAME="LLM Duell"
 APP="dist/$NAME.app"
 MAKE_DMG=false
