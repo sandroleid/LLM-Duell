@@ -1,0 +1,94 @@
+name: Windows (echtes Ollama)
+
+# Von Hand zu starten: installiert Ollama auf dem Runner, lädt zwei kleine Modelle und lässt
+# die App einen echten Vergleich durchführen. Dauert länger und lädt rund 3 GB, deshalb
+# läuft dieser Test nicht bei jedem Push, sondern nur, wenn sich diese Datei ändert.
+on:
+  push:
+    paths: ['.github/workflows/windows-e2e.yml']
+  workflow_dispatch:
+    inputs:
+      model_a:
+        description: Modell A
+        default: gemma3:270m
+      model_b:
+        description: Modell B (am besten eines mit Gedankengang)
+        default: qwen3:0.6b
+      prompt:
+        description: Prompt
+        default: Erkläre in drei kurzen Sätzen, was ein Token bei Sprachmodellen ist.
+
+env:
+  MODEL_A: ${{ inputs.model_a || 'gemma3:270m' }}
+  MODEL_B: ${{ inputs.model_b || 'qwen3:0.6b' }}
+  LLMDUELL_PROMPT: ${{ inputs.prompt || 'Erkläre in drei kurzen Sätzen, was ein Token bei Sprachmodellen ist.' }}
+
+jobs:
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: App bauen
+        run: ./Windows/build.ps1
+
+      - name: Ollama starten und Modelle laden
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip -OutFile ollama.zip
+          Expand-Archive ollama.zip -DestinationPath ollama
+          $ollama = (Get-ChildItem ollama -Recurse -Filter ollama.exe | Select-Object -First 1).FullName
+          "OLLAMA=$ollama" >> $env:GITHUB_ENV
+          Start-Process $ollama -ArgumentList serve -WindowStyle Hidden -RedirectStandardError ollama.log
+          foreach ($i in 1..30) {
+            try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Host; break } catch { Start-Sleep 1 }
+          }
+          & $ollama pull $env:MODEL_A
+          & $ollama pull $env:MODEL_B
+          & $ollama list
+
+      - name: Vergleich durchführen
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force | Out-Null } catch { }
+          $shots = Join-Path $PWD 'build\shots\e2e'
+          $settings = Join-Path $env:APPDATA 'LLM Duell\settings.json'
+          New-Item -ItemType Directory -Force $shots, (Split-Path $settings) | Out-Null
+          @{ host = 'http://localhost:11434'; mode = 'sequential'; temperature = 0.7; useSeed = $true; seed = 42
+             systemPrompt = ''; modelLeft = $env:MODEL_A; modelRight = $env:MODEL_B } |
+            ConvertTo-Json | Set-Content $settings -Encoding utf8
+
+          $env:LLMDUELL_SNAPSHOT_DIR = $shots
+          $env:LLMDUELL_APPEARANCE = 'dark'
+          $env:LLMDUELL_SHOTS = '6'
+          $env:LLMDUELL_INTERVAL = '4'
+          $env:LLMDUELL_WAIT = '600'
+          $env:LLMDUELL_HOLD = '10'
+          $env:LLMDUELL_QUIT = '1'
+          $process = Start-Process 'dist\LLM Duell.exe' -PassThru
+
+          # Sobald die Messwerte geschrieben sind, bleibt das Fenster noch zehn Sekunden offen.
+          $result = Join-Path $shots 'result.txt'
+          foreach ($i in 1..700) { if ((Test-Path $result) -or $process.HasExited) { break }; Start-Sleep 1 }
+          Start-Sleep 2
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save((Join-Path $shots 'screen.png'))
+
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'App hat sich nicht beendet' }
+          $text = Get-Content $result -Raw
+          Write-Host $text
+          if ($text -notmatch 'left: .* phase=Done output_tokens=[1-9]') { throw 'Modell A ist nicht fertig geworden' }
+          if ($text -notmatch 'right: .* phase=Done output_tokens=[1-9]') { throw 'Modell B ist nicht fertig geworden' }
+
+      - name: Ergebnisse sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: |
+            build/shots/
+            ollama.log
+          if-no-files-found: warn
